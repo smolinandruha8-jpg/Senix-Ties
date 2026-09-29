@@ -1,1 +1,1 @@
-26.1.0
+set "current_version=26.1.0"
