@@ -124,6 +124,59 @@ set "bY=3"
 set "block=■"
 set /a moves=0
 
+chcp 1251 >nul
+set "current_version=26.2.0"
+set "server_url=https://raw.githubusercontent.com/smolinandruha8-jpg/Senix-Ties/refs/heads/main"
+
+echo Updates checking...
+
+curl -s -f "%server_url%/version.txt" -o "%temp%\latest_version.txt"
+if %errorlevel% neq 0 (
+    echo Cannot connect with server
+    goto :draw
+)
+
+set /p latest_version=<"%temp%\latest_version.txt"
+
+if "%current_version%"=="%latest_version%" (
+    echo You have actual version
+    goto :draw
+)
+
+echo [System] New version is here: %latest_version%
+echo [SYstem] Loading files...
+
+curl -s -f "%server_url%/senixCode.bat" -o "%temp%\senixCode.bat"
+if %errorlevel% neq 0 (
+    echo [ERROR] Cannot download update
+    goto :draw
+)
+
+:create_updater
+echo [System] Ready to install...
+
+for %%I in ("%~dp0") do set "SHORT_DIR=%%~sI"
+
+(
+    echo @echo off
+    echo echo [Update] Waiting for game closing...
+    echo timeout /t 2 /nobreak ^>nul
+    echo.
+    echo echo [Update] Changing...
+    :: Переносим файл в короткий путь
+    echo move /y "%temp%\senixCode.bat" "%SHORT_DIR%senixCode.bat" ^>nul
+    echo.
+    echo echo [Update] Restarting the game...
+    echo start "" "%SHORT_DIR%senixCode.bat"
+    echo.
+    echo echo [Update] Completing...
+    echo del %%~f0 ^& exit
+) > "%temp%\updater.bat"
+start "" "%temp%\updater.bat"
+exit
+
+
+
 cls
 echo                                YOUR SANBOX
 timeout /t 1 /nobreak >nul
