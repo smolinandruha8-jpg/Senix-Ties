@@ -40,39 +40,32 @@ set /a ve=0
 set "skin=@"
 cls
 cd /d "%~dp0"
-cd user
+cd user 2>nul
 if not exist "profile.dll" (
-goto :notz
+    goto :notz
 ) else (
-goto :next
+    goto :next
 )
 
-   :notz
-   echo Welcome to senix!
-   echo I see you're new. Please enter a nickname... & set /p nickn=... 
-   echo %nickn% > "%~dp0user\profile.dll"
+:notz
+echo Welcome to senix!
+echo I see you're new. Please enter a nickname... & set /p nickn=... 
+echo %nickn% > "%~dp0user\profile.dll"
 
 :next
 for /f "usebackq delims=" %%a in ("%~dp0user\profile.dll") do (
     set "ni=%%a"
 )
 
-for /f "usebackq delims=" %%a in ("%~dp0user\skin.dll") do (
-    %%a
+if exist "%~dp0user\skin.dll" (
+    for /f "usebackq delims=" %%a in ("%~dp0user\skin.dll") do (
+        %%a
+    )
 )
 
-
-cd /d "%~dp0"
-cd user
-for /f "usebackq delims=" %%a in ("skin.dll ") do (
-    %%a
-)
-cd /d "%~dp0"
-
-goto :b
+goto :init_updater
 
 :init_game
-
 for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
 set "pX=5"
 set "pY=5"
@@ -96,7 +89,7 @@ set /a last_move=0
 
 :load_stats
 cd /d "%~dp0"
-cd user
+cd user 2>nul
 set /a cp_used=1
 set "blocks_placed=0"
 set "blocks_breaked=0"
@@ -105,8 +98,6 @@ set /a moves=0
 
 if not exist "stats.dll" goto :skip_defaults
 
-cd /d "%~dp0"
-cd user
 for /f "usebackq tokens=1,2 delims=: " %%a in ("stats.dll") do (
     set "%%a=%%b"
 )
@@ -123,75 +114,78 @@ set "bX=3"
 set "bY=3"
 set "block=■"
 set /a moves=0
+goto :draw
 
+:: ==========================================================
+:: ИСПРАВЛЕННЫЙ БЛОК ОБНОВЛЕНИЯ
+:: ==========================================================
+:init_updater
 chcp 1251 >nul
 set "current_version=26.2.0"
-set "server_url=https://raw.githubusercontent.com/smolinandruha8-jpg/Senix-Ties/refs/heads/main"
+set "server_url=https://githubusercontent.com"
 
 echo Updates checking...
 
-curl -s -f "%server_url%/version.txt" -o "%temp%\latest_version.txt"
-if %errorlevel% neq 0 (
-    echo Cannot connect with server
-    goto :draw
+:: Получаем версию напрямую из сети без промежуточных файлов
+set "latest_version="
+for /f "usebackq delims=" %%a in (`curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" "%server_url%/version.txt?v=%RANDOM%"`) do (
+    set "latest_version=%%a"
 )
 
-set /p latest_version=<"%temp%\latest_version.txt"
+:: Проверка на ошибку 404 или пустой ответ
+echo %latest_version% | findstr /i "404" >nul
+if %errorlevel% eq 0 set "latest_version="
+
+if "%latest_version%"="" (
+    echo [System] Сервер обновлений недоступен или файл отсутствует.
+    timeout /t 2 /nobreak >nul
+    chcp 65001 >nul
+    goto :init_game
+)
+
+set "latest_version=%latest_version: =%"
 
 if "%current_version%"=="%latest_version%" (
     echo You have actual version
-    goto :draw
+    timeout /t 1 /nobreak >nul
+    chcp 65001 >nul
+    goto :init_game
 )
 
 echo [System] New version is here: %latest_version%
-echo [SYstem] Loading files...
+echo [System] Loading files...
 
-curl -s -f "%server_url%/senixCode.bat" -o "%temp%\senixCode.bat"
+curl -s -f -H "Cache-Control: no-cache" -H "Pragma: no-cache" "%server_url%/senixCode.bat?v=%RANDOM%" -o "%temp%\senixCode.bat"
 if %errorlevel% neq 0 (
-    echo [ERROR] Cannot download update
-    goto :draw
+    echo [ERROR] Не удалось скачать обновление. Запуск текущей версии...
+    timeout /t 2 /nobreak >nul
+    chcp 65001 >nul
+    goto :init_game
 )
 
 :create_updater
 echo [System] Ready to install...
-
 for %%I in ("%~dp0") do set "SHORT_DIR=%%~sI"
+set "RUNNING_FILE=%~nx0"
 
 (
     echo @echo off
-    echo echo [Update] Waiting for game closing...
-    echo timeout /t 2 /nobreak ^>nul
-    echo.
-    echo echo [Update] Changing...
-    :: Переносим файл в короткий путь
-    echo move /y "%temp%\senixCode.bat" "%SHORT_DIR%senixCode.bat" ^>nul
-    echo.
-    echo echo [Update] Restarting the game...
-    echo start "" "%SHORT_DIR%senixCode.bat"
-    echo.
-    echo echo [Update] Completing...
-    echo del %%~f0 ^& exit
+    echo chcp 1251 ^>nul
+    echo echo [Update] Waiting for game to close...
+    echo timeout /t 3 /nobreak ^>nul
+    echo del /f /q "%SHORT_DIR%%RUNNING_FILE%" ^>nul 2^>^&1
+    echo move /y "%temp%\senixCode.bat" "%SHORT_DIR%%RUNNING_FILE%" ^>nul
+    echo echo [Update] Restarting...
+    echo start "" /d "%SHORT_DIR%" "%RUNNING_FILE%"
+    echo exit
 ) > "%temp%\updater.bat"
+
 start "" "%temp%\updater.bat"
 exit
-
-
-
-cls
-echo                                YOUR SANBOX
-timeout /t 1 /nobreak >nul
-echo                                  FINALLY
-timeout /t 1 /nobreak >nul
-cls
-echo                                   SENIX
-timeout /t 1 /nobreak >nul
-start "" /b "cmdmp3.exe" "menu.mp3"
-echo                                  v2026.22
-timeout /t 1 /nobreak >nul
-cls
+:: ==========================================================
 
 :draw
-
+chcp 65001 >nul
 set /a hp=100
 cls
 echo PLEASE SWITCH TO THE ENGLISH LAYOUT
@@ -434,14 +428,11 @@ if "!key!"=="8" goto :save
 if "!key!"=="7" goto :place
 if "!key!"=="6" goto :draw
 if "!key!"=="5" goto :action
-
 if !key! equ 1 call :move !pX! !pY!-1
 if !key! equ 2 call :move !pX!-1 !pY!
 if !key! equ 3 call :move !pX! !pY!+1
 if !key! equ 4 call :move !pX!+1 !pY!
-
 goto :game_loop
-
 :hotkeys
 cls
 echo                 [W,A,S,D] - Move, F - break block, M - menu, R - place block, C - Save map, T - console, H - credits, K - Marketplace
@@ -449,16 +440,14 @@ echo                     X - place wall, N - Install commandpacks, G - place ele
 echo                        K - trade
 pause
 goto :game_loop
-
 :console
 set /p "cmd=>>"
 call :%cmd%
 goto :game_loop
-
 :marketplace
 cls
 echo What you  want to sell? (use block's name, like crystals or blocks)
-set /p zis=Enter: 
+set /p zis=Enter:
 echo What's count?
 set /p ziscount=Enter:
 set /a market=1
@@ -467,8 +456,6 @@ echo Wait for someguy by it!
 pause
 cls
 goto :game_loop
-
-
 :craft
 cls
 echo [--------------------------------------------------------------------------]
@@ -487,7 +474,7 @@ echo.
 echo SENIX //
 echo [8] [BUG STAR] 50 walls, 1000 blocks, 599 crystals, 20 elevators
 echo [9] [CRYSTAL FARM] 10 crystals, 100 blocks, 1 elevator
-set /p craft_name=Enter number of what you want to craft: 
+set /p craft_name=Enter number of what you want to craft:
 if %craft_name% equ 1 if %blocks% gtr 1 set /a walls+=1 & set /a blocks-=2
 if %craft_name% equ 2 if %walls% gtr 0 if %crystals% gtr 1 set /a elevators+=1 & set /a walls-=1 & set /a crystals-=2
 if %craft_name% equ 3 if %blocks% gtr 9 set /a has_pickaxe=1 & set /a blocks-=10
@@ -495,107 +482,71 @@ if %craft_name% equ 4 if %crystals% gtr 2 if %walls% gtr 4 set /a shield=100 & s
 if %craft_name% equ 5 if %crystals% gtr 0 if %blocks% gtr 2 start "" /b "cmdmp3.exe" "Theme1.mp3" & set /a blocks-=3 & set /a crystals-=1
 if %craft_name% equ 6 if %crystals% gtr 0 if %blocks% gtr 2 start "" /b "cmdmp3.exe" "Theme2.mp3" & set /a blocks-=3 & set /a crystals-=1
 if %craft_name% equ 7 if %crystals% gtr 0 if %blocks% gtr 2 start "" /b "cmdmp3.exe" "Theme3.mp3" & set /a blocks-=3 & set /a crystals-=1
-
 if %craft_name% equ 9 if %crystals% gtr 9 if %blocks% gtr 99 if %elevators% gtr 0 set /a crystal_farm+=1 & set /a crystals-=10 & set /a blocks-=100 & set /a elevators-=1
 if %craft_name% equ 8 if %crystals% gtr 598 if %blocks% gtr 999 if %elevators% gtr 19 if %walls% gtr 49 set /a crystals-=599 & set /a blocks-=1000 & set /a elevators-=20 & set /a walls-=50 & set /a game_finished=1 & call :save_stats_file & goto :credits
 goto :game_loop
-@echo off
-
-:b
-if exist "desktop.ini" goto :draw
-
-for /f "skip=1 tokens=1-3" %%A in ('wmic path Win32_LocalTime get Day^,Year /format:table') do (
-    if not "%%B"=="" (
-        set zz=%%A
-        set zzz=%%B
-    )
-)
-
-set /a sva=%zz% * 999777 + %zzz% * 40023
-
-:ll
-set "ks="
-set /p ks="No licence, enter key: "
-
-if "%ks%"=="%sva%" (
-    echo %ks% > "desktop.ini"
-    attrib +h +s "desktop.ini"
-    goto :draw
-) else (
-    echo Wrong key!
-    goto :ll
-)
-
 :stats
 cls
 echo blocks breaked: %blocks_breaked%
 echo blocks placed: %blocks_placed%
 pause
 goto :game_loop
-
 :action
-set "current_cell=!map_%pX%_%pY%!"
+set "current_cell=!map_%pX%%pY%!"
 if not "!current_cell!"=="." if %bb% equ 1 (
-    if "!current_cell!"=="!crystal_char!" if !has_pickaxe! equ 1 (
-         set /a crystals+=1
-         set "map_%pX%_%pY%=."
-         set /a blocks_breaked+=1
-    )
-    if "!current_cell!"=="!elevator_char!" if !has_pickaxe! equ 1 (
-         set /a elevators+=1
-         set "map_%pX%_%pY%=."
-         set /a blocks_breaked+=1
-    )
-    if "!current_cell!"=="!block_char!" (
-         set /a blocks+=1
-         set "map_%pX%_%pY%=."
-         set /a blocks_breaked+=1
-    )
-    call :save_stats_file
+if "!current_cell!"=="!crystal_char!" if !has_pickaxe! equ 1 (
+set /a crystals+=1
+set "map%pX%%pY%=."
+set /a blocks_breaked+=1
+)
+if "!current_cell!"=="!elevator_char!" if !has_pickaxe! equ 1 (
+set /a elevators+=1
+set "map%pX%%pY%=."
+set /a blocks_breaked+=1
+)
+if "!current_cell!"=="!block_char!" (
+set /a blocks+=1
+set "map%pX%_%pY%=."
+set /a blocks_breaked+=1
+)
+call :save_stats_file
 )
 goto :game_loop
-
 :place
 if %pb% equ 1 if %blocks% gtr 0 (
-    start "" /b "cmdmp3.exe" "place.mp3"
-    set "map_%pX%_%pY%=%block_char%"
-    set /a blocks-=1
-    set /a blocks_placed+=1
-
-    set /a "uY=%pY%-1", "dY=%pY%+1", "lX=%pX%-1", "rX=%pX%+1"
-
-    for %%A in ("%pX%_!uY!" "%pX%_!dY!" "!lX!_%pY!" "!rX!_%pY!") do (
-        for /f "tokens=1,2 delims=_" %%B in (%%A) do (
-            if "!map_%%B_%%C!"=="%lava_char%" (
-                set "map_%%B_%%C=%block_char%"
-            )
-        )
-    )
-    call :save_stats_file
+start "" /b "cmdmp3.exe" "place.mp3"
+set "map_%pX%_%pY%=%block_char%"
+set /a blocks-=1
+set /a blocks_placed+=1
+set /a "uY=%pY%-1", "dY=%pY%+1", "lX=%pX%-1", "rX=%pX%+1"
+for %%A in ("%pX%!uY!" "%pX%!dY!" "!lX!%pY!" "!rX!%pY!") do (
+for /f "tokens=1,2 delims=" %%B in (%%A) do (
+if "!map%%B_%%C!"=="%lava_char%" (
+set "map_%%B_%%C=%block_char%"
+)
+)
+)
+call :save_stats_file
 )
 goto :game_loop
-
 :place_wall
 if %pb% equ 1 if %walls% gtr 0 set "map_%pX%_%pY%=%wall_char%" & set /a walls-=1 & start "" /b "cmdmp3.exe" "place.mp3"
 goto :game_loop
-
 :place_elevator
 if %pb% equ 1 if %elevators% gtr 0 set "map_%pX%_%pY%=%elevator_char%" & set /a elevators-=1 & start "" /b "cmdmp3.exe" "place.mp3"
 goto :game_loop
-
 :cp
 cls
 pushd commandpacks 2>nul
-set /p nak=Enter commandpack name (without .bxcp): 
-
+set /p nak=Enter commandpack name (without .bxcp):
 if not exist "%nak%.bxcp" (
-    echo File not found!
-    popd
-    pause
-    goto :game_loop
+echo File not found!
+popd
+pause
+goto :game_loop
 )
 for /f "usebackq delims=" %%a in ("%nak%.bxcp") do (
-    call :%%a
+call :%%a
 )
 popd
 set /a cp_used=2
@@ -603,191 +554,162 @@ call :save_stats_file
 echo Commandpack %nak% loaded!
 timeout /t 1 >nul
 goto :game_loop
-
 :setNoWallCollisions
 set /a wc=2
 goto :eof
-
 :make_bridge
 for /L %%x in (%~1,1,%~2) do set "map_%%x_%~3=%block_char%"
 goto :eof
-
 :setNoLavaDamage
 set /a lh=2
 goto :eof
-
 :spawn_loot
 set /a "rx=%RANDOM% %% 18 + 2", "ry=%RANDOM% %% 18 + 2"
 set "map_%rx%_%ry%=%crystal_char%"
 set "msg=New Crystal spawned at %rx%:%ry%!"
 goto :eof
-
 :setn
 set /a %~1=%~2
 goto :eof
-
 :sett
 set "%~1=%~2"
 goto :eof
-
 :give
 set /a %~1+=%~2
 goto :eof
-
 :add
 set /a %~1+=%~2
 goto :eof
-
 :playerXY
 if "%~1"=="" (
-    echo ERRORS IN setPlayerSpawn [[arg1]]
-    pause
-    goto :eof
+echo ERRORS IN setPlayerSpawn [[arg1]]
+pause
+goto :eof
 )
 if "%~2"=="" (
-    echo ERRORS IN setPlayerSpawn [[arg2]]
-    pause
-    goto :eof
+echo ERRORS IN setPlayerSpawn [[arg2]]
+pause
+goto :eof
 )
 set /a "pX=%~1"
 set /a "pY=%~2"
 goto :eof
-
 :auto_action
-set "current_cell=!map_%pX%_%pY%!"
+set "current_cell=!map_%pX%%pY%!"
 if not "!current_cell!"=="." if %bb% equ 1 (
-    if "!current_cell!"=="!crystal_char!" if !has_pickaxe! equ 1 (
-         set /a crystals+=1
-         set "map_%pX%_%pY%=."
-         set /a blocks_breaked+=1
-    )
-    if "!current_cell!"=="!elevator_char!" if !has_pickaxe! equ 1 (
-         set /a elevators+=1
-         set "map_%pX%_%pY%=."
-         set /a blocks_breaked+=1
-    )
-    if "!current_cell!"=="!block_char!" (
-         set /a blocks+=1
-         set "map_%pX%_%pY%=."
-         set /a blocks_breaked+=1
-    )
-    call :save_stats_file
+if "!current_cell!"=="!crystal_char!" if !has_pickaxe! equ 1 (
+set /a crystals+=1
+set "map%pX%%pY%=."
+set /a blocks_breaked+=1
+)
+if "!current_cell!"=="!elevator_char!" if !has_pickaxe! equ 1 (
+set /a elevators+=1
+set "map%pX%%pY%=."
+set /a blocks_breaked+=1
+)
+if "!current_cell!"=="!block_char!" (
+set /a blocks+=1
+set "map%pX%_%pY%=."
+set /a blocks_breaked+=1
+)
+call :save_stats_file
 )
 goto :eof
-
 :auto_place
 if %pb% equ 1 if %blocks% gtr 0 (
-    start "" /b "cmdmp3.exe" "place.mp3"
-    set "map_%pX%_%pY%=%block_char%"
-    set /a blocks-=1
-    set /a blocks_placed+=1
-
-    set /a "uY=%pY%-1", "dY=%pY%+1", "lX=%pX%-1", "rX=%pX%+1"
-
-    for %%A in ("%pX%_!uY!" "%pX%_!dY!" "!lX!_%pY!" "!rX!_%pY!") do (
-        for /f "tokens=1,2 delims=_" %%B in (%%A) do (
-            if "!map_%%B_%%C!"=="%lava_char%" (
-                set "map_%%B_%%C=%block_char%"
-            )
-        )
-    )
-    call :save_stats_file
+start "" /b "cmdmp3.exe" "place.mp3"
+set "map_%pX%_%pY%=%block_char%"
+set /a blocks-=1
+set /a blocks_placed+=1
+set /a "uY=%pY%-1", "dY=%pY%+1", "lX=%pX%-1", "rX=%pX%+1"
+for %%A in ("%pX%!uY!" "%pX%!dY!" "!lX!%pY!" "!rX!%pY!") do (
+for /f "tokens=1,2 delims=" %%B in (%%A) do (
+if "!map%%B_%%C!"=="%lava_char%" (
+set "map_%%B_%%C=%block_char%"
+)
+)
+)
+call :save_stats_file
 )
 goto :eof
-
 :pause
 pause
 goto :eof
-
 :setHP
 set /a hp=%~1
 goto :eof
-
 :cantPlaceBlocks
 set /a pb=2
 goto :eof
-
 :cantBreakBlocks
 set /a bb=2
 goto :eof
-
 :setchar
 set /a xz=%~1
 set /a yz=%~2
 set "chr=%~3"
 set "map_%xz%_%yz%=%chr%"
 goto :eof
-
 :wait
 set "secon=%~1"
 timeout /t %secon% >nul
 goto :eof
-
 :reblocks
 set "arg1=%~1"
 set "arg2=%~2"
 for /L %%y in (1,1,20) do (
-    for /L %%x in (1,1,20) do (
-        if "!map_%%x_%%y!"=="%arg1%" (
-            set "map_%%x_%%y=%arg2%"
-        )
-    )
+for /L %%x in (1,1,20) do (
+if "!map_%%x_%%y!"=="%arg1%" (
+set "map_%%x_%%y=%arg2%"
+)
+)
 )
 goto :eof
-
 :text
 set "msg=%*"
 call :render_frame
 pause
 goto :eof
-
 :set_skin
 set "new_skin=%~1"
 set "skin=%new_skin%"
 goto :game_loop
-
 :ach
 cls
 echo                             ACHIEVEMENTS
 if !blocks_breaked! gtr 99 echo [1] Why to many blocks [Break 100 blocks] COMPLETED
 if !blocks_breaked! lss 100 echo [1] Why to many blocks [Break 100 blocks] UNCOMPLETED
-
 if !blocks_placed! gtr 199 echo [2] We building New-York! [Place 200 blocks] COMPLETED
 if !blocks_placed! lss 200 echo [2] We building New-York! [Place 200 blocks] UNCOMPLETED
-
 if !cp_used! equ 2 echo [3] Command-pro [Use commandpack] COMPLETED
 if !cp_used! neq 2 echo [3] Command-pro [Use commandpack] UNCOMPLETED
-
 if !game_finished! equ 1 echo [4] End of ix [Complete the game] COMPLETED
-if !game_finished! neq 1 echo [4] End of ix [Complete the game] UNCOMPLETED   
+if !game_finished! neq 1 echo [4] End of ix [Complete the game] UNCOMPLETED
 pause
 goto :game_loop
-
 :fillmap
 for /L %%y in (1,1,15) do (
-    for /L %%x in (1,1,15) do (
-         set "map_%%x_%%y=%~1"
-    )
+for /L %%x in (1,1,15) do (
+set "map_%%x_%%y=%~1"
+)
 )
 goto :eof
-
 :save
 cd /d "%~dp0"
-cd maps
+cd maps 2>nul
 cls
 set "name="
-set /p name=Enter name of your map: 
-
+set /p name=Enter name of your map:
 echo Saving map...
-md "%name%"
+md "%name%" 2>nul
 cd %name%
-md "commandpacks"
+md "commandpacks" 2>nul
 (
-  for /L %%y in (1,1,%yh%) do (
-    for /L %%x in (1,1,%xh%) do (
-      echo set "map_%%x_%%y=!map_%%x_%%y!"
-    )
-  )
+for /L %%y in (1,1,%yh%) do (
+for /L %%x in (1,1,%xh%) do (
+echo set "map_%%x_%%y=!map_%%x_%%y!"
+)
+)
 ) > "code.bxme"
 echo set /a shield=%shield% >> "code.bxme"
 echo set /a has_pickaxe=%has_pickaxe% >> "code.bxme"
@@ -795,28 +717,20 @@ echo set /a blocks=%blocks% >> "code.bxme"
 echo set /a walls=%walls% >> "code.bxme"
 echo set /a crystals=%crystals% >> "code.bxme"
 echo set /a elevators=%elevators% >> "code.bxme"
-
 set day=%DATE:~0,2%
 set month=%DATE:~3,2%
 set year=%DATE:~6,4%
-
 echo %day%:%month%:%year% > date.bxme
 echo %ni% > owner.bxme
 echo 22 > version.bxme
-
 echo set /a pX=%pX% >> "code.bxme"
 echo set /a pY=%pY% >> "code.bxme"
-
 echo set /a xh=%xh% >> "code.bxme"
 echo set /a yh=%yh% >> "code.bxme"
-
 echo Map saved!
 cd /d "%~dp0"
 pause
 goto :game_loop
-
-pause
-
 :move
 if %hp% lss 30 (
 set /a "pain=!RANDOM! %% 2"
@@ -825,79 +739,64 @@ set "msg=you are so weak..."
 goto :eof
 )
 )
-start "" /b "cmdmp3.exe" "Walk.mp3"
+start "" /b "cmdmp3.exe" "Walk.mp3" 2>nul
 set /a "tX=%~1", "tY=%~2"
-
 if %shield% gtr 0 (
 set /a shield-=1
 )
-
 if %tX% lss 1 goto :eof
-if %tX% gtr 20 goto :eof
+if %tX% gtr %xh% goto :eof
 if %tY% lss 1 goto :eof
-if %tY% gtr 20 goto :eof
-
+if %tY% gtr %yh% goto :eof
 call set "cell=%%map_%tX%_%tY%%%"
 set "cell=%cell: =%"
-
 if "%cell%"=="%wall_char%" if "%wc%"=="1" goto :eof
-
 if "%cell%"=="%lava_char%" if %shield% lss 1 (
-    if "%lh%"=="1" (
-        set /a hp-=30
-        goto :eof
-    )
+if "%lh%"=="1" (
+set /a hp-=30
+goto :eof
 )
-
+)
 call set "current_tile=%%map_%pX%_%pY%%%"
-
 if "%current_tile%"=="%elevator_char%" if %tY% lss %pY% (
 set /a "tY-=2"
 )
 if "%current_tile%"=="%elevator_char%" if %tY% gtr %pY% (
 set /a "tY+=2"
 )
-
-
 set "pX=%tX%"
 set "pY=%tY%"
 goto :eof
-
 :save_stats_file
-> "%~dp0user\stats.dll" echo blocks_breaked: %blocks_breaked%
->> "%~dp0user\stats.dll" echo blocks_placed: %blocks_placed%
->> "%~dp0user\stats.dll" echo cp_used: %cp_used%
->> "%~dp0user\stats.dll" echo game_finished: %game_finished%
+md "%~dp0user" 2>nul
+"%~dp0user\stats.dll" echo blocks_breaked: %blocks_breaked%
+"%~dp0user\stats.dll" echo blocks_placed: %blocks_placed%
+"%~dp0user\stats.dll" echo cp_used: %cp_used%
+"%~dp0user\stats.dll" echo game_finished: %game_finished%
 goto :eof
-
-
 :get_pseudo_random
 set /a "curr_seed=(curr_seed * 1103515245 + 12345) & 0x7FFFFFFF"
 set /a "pseudo_val=curr_seed %% 32768"
 exit /b
-
 :render_frame
-cls
 echo   Press I to see all hotkeys
 echo    XY: %pX%:%pY%                       seed: %seed%
 echo   HP [%hp%] INFO: %msg%
 echo.
 echo  blocks [%blocks%] crystals [%crystals%]
-echo  walls [%walls%] elevators [%elevators%]                                      
+echo  walls [%walls%] elevators [%elevators%]
 for /L %%y in (1,1,%yh%) do (
-    set "line="
-    for /L %%x in (1,1,%xh%) do (
-        set "char=!map_%%x_%%y! "
-        if %%x equ !pX! if %%y equ !pY! set "char=!skin! "
-        
-        set "line=!line!!char!"
-    )
-    echo                                       !line!
+set "line="
+for /L %%x in (1,1,%xh%) do (
+set "char=!map_%%x_%%y! "
+if %%x equ !pX! if %%y equ !pY! set "char=!skin! "
+set "line=!line!!char!"
+)
+echo                                       !line!
 )
 goto :eof
-
 :credits
-start "" /b "cmdmp3.exe" "Credits.mp3"
+start "" /b "cmdmp3.exe" "Credits.mp3" 2>nul
 cls
 echo [pocked] Hi player!
 timeout /t 10 /nobreak >nul
