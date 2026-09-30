@@ -1,2 +1,1 @@
-set "current_version=26.0.0"
-
+26.0.0
